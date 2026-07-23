@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Emparejador Global - Firebase</title>
+
+  <!-- Firebase Compat SDK: pensado para HTML simple, sin npm ni compiladores -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b, #334155);
+      color: #f8fafc;
+      min-height: 100vh;
+      padding: 12px;
+    }
+    .app { max-width: 1000px; margin: auto; }
+    .header { text-align: center; margin-bottom: 16px; }
+    .header h1 { margin: 0; font-size: 24px; color: #fff; }
+    .header p { margin: 4px 0 0; font-size: 13px; color: #38bdf8; font-weight: bold; }
+    .main-nav { display: flex; gap: 8px; margin-bottom: 14px; background: rgba(15,23,42,.8); padding: 6px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1); }
+    .nav-tab { flex: 1; padding: 10px; border: none; background: transparent; color: #94a3b8; font-weight: bold; font-size: 13px; border-radius: 8px; cursor: pointer; text-align: center; }
+    .nav-tab.active { background: #2563eb; color: #fff; }
+    .user-bar { display: flex; justify-content: space-between; align-items: center; background: rgba(15,23,42,.9); padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); margin-bottom: 12px; font-size: 13px; }
+    .panel { background: rgba(30,41,59,.72); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 16px; backdrop-filter: blur(12px); box-shadow: 0 10px 25px rgba(0,0,0,.3); margin-bottom: 16px; }
+    .app-disabled #vistaCarga .panel input,
+    .app-disabled #vistaCarga .panel button:not(.btn-auth):not(.nav-tab),
+    .app-disabled #vistaCarga .panel select,
+    .app-disabled #vistaCarga .check-box,
+    .app-disabled #vistaCarga .unit-btn { opacity: .4!important; pointer-events: none!important; cursor: not-allowed!important; }
+    .banner-bloqueo { background: rgba(225,29,72,.2); border: 1px solid #f43f5e; color: #fecdd3; padding: 10px 14px; border-radius: 10px; font-size: 13px; text-align: center; margin-bottom: 12px; font-weight: bold; }
+    .unit-selector { display: flex; justify-content: center; gap: 8px; margin-bottom: 12px; }
+    .unit-btn { flex: 1; max-width: 220px; background: #334155; color: #cbd5e1; border: 2px solid #475569; padding: 10px 12px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 13px; }
+    .unit-btn.active { background: #2563eb; color: #fff; border-color: #38bdf8; }
+    .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; background: rgba(0,0,0,.25); padding: 12px; border-radius: 12px; margin-bottom: 12px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }
+    label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px; font-weight: 600; }
+    input[type="text"], input[type="number"], input[type="password"], input[type="date"], textarea, select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: #fff; outline: none; font-size: 16px; -webkit-appearance: none; touch-action: manipulation; }
+    .check-box { height: 46px; display: flex; align-items: center; gap: 8px; background: #0f172a; padding: 0 12px; border-radius: 10px; border: 1px solid #475569; cursor: pointer; }
+    button { border: none; border-radius: 10px; padding: 12px 16px; cursor: pointer; font-weight: bold; font-size: 14px; transition: all .2s ease; touch-action: manipulation; }
+    .btn-primary { background: linear-gradient(135deg, #0284c7, #2563eb); color: #fff; width: 100%; }
+    .btn-success { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; width: 100%; margin-top: 12px; font-size: 16px; padding: 14px; }
+    .btn-export-word { background: linear-gradient(135deg, #1d4ed8, #1e40af); color: #fff; width: 100%; margin-top: 10px; font-size: 15px; padding: 12px; }
+    .btn-export-text { background: linear-gradient(135deg, #25d366, #128c7e); color: #fff; width: 100%; margin-top: 8px; font-size: 15px; padding: 12px; }
+    .btn-random { background: linear-gradient(135deg, #9333ea, #7e22ce); color: #fff; width: 100%; font-size: 15px; margin-top: 8px; }
+    .btn-nav { background: #475569; color: #fff; }
+    .btn-danger { background: #dc2626; color: #fff; margin-top: 12px; width: 100%; }
+    .btn-auth { background: #0284c7; color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 6px; }
+    .btn-admin { background: #eab308; color: #0f172a; font-size: 12px; padding: 6px 12px; border-radius: 6px; font-weight: bold; }
+    .btn-edit { background: rgba(56,189,248,.2); color: #38bdf8; border: 1px solid rgba(56,189,248,.4); padding: 6px 10px; font-size: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    .section-title { margin: 0 0 12px; font-size: 18px; color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .participants { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .stud-card { background: rgba(15,23,42,.8); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; padding: 12px; }
+    .stud-card h3 { margin: 0 0 8px; color: #facc15; font-size: 16px; border-bottom: 1px solid rgba(255,255,255,.1); padding-bottom: 4px; }
+    .gallo-item { background: rgba(255,255,255,.04); padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .order-badge { background: #2563eb; color: #fff; font-weight: bold; padding: 2px 6px; border-radius: 6px; font-size: 11px; margin-right: 4px; }
+    .tag-tuerto { background: rgba(239,68,68,.25); color: #fca5a5; border: 1px solid rgba(239,68,68,.5); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-left: 4px; display: inline-block; }
+    .results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .match-card { border-radius: 14px; padding: 14px; background: #0f172a; border: 1px solid rgba(255,255,255,.12); position: relative; overflow: hidden; }
+    .match-card::before { content: ""; position: absolute; left: 0; top: 0; width: 6px; height: 100%; background: #3b82f6; }
+    .match-card.sorteo-sorteado::before { background: #a855f7; }
+    .match-card.cruce-mixto::before { background: linear-gradient(#facc15,#ef4444); }
+    .match-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .badge { padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: bold; background: rgba(59,130,246,.15); color: #93c5fd; border: 1px solid rgba(59,130,246,.35); }
+    .badge-sorteo { background: rgba(168,85,247,.15); color: #c084fc; border: 1px solid rgba(168,85,247,.35); }
+    .badge-mixto { background: rgba(239,68,68,.15); color: #fca5a5; border: 1px solid rgba(239,68,68,.4); }
+    .fighter { padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); margin-bottom: 6px; }
+    .fighter strong { color: #fff; font-size: 14px; }
+    .fighter span { color: #94a3b8; font-size: 12px; }
+    .vs { text-align: center; font-weight: bold; color: #38bdf8; margin: 4px 0; font-size: 12px; }
+    .alert-card { background: rgba(245,158,11,.15); border: 1px solid rgba(245,158,11,.4); padding: 12px; border-radius: 10px; margin-bottom: 10px; color: #fef08a; font-size: 13px; }
+    .unpaired, .public-unpaired { background: rgba(234,179,8,.1); border: 1px solid rgba(234,179,8,.3); border-radius: 10px; padding: 10px; color: #fef08a; margin-bottom: 6px; font-size: 13px; }
+    .empty { color: #94a3b8; font-style: italic; font-size: 13px; }
+    .nav-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; }
+    .summary { display: flex; gap: 8px; margin-bottom: 12px; }
+    .summary-card { background: rgba(255,255,255,.05); padding: 8px; border-radius: 8px; flex: 1; text-align: center; font-size: 12px; }
+    .summary-card strong { display: block; font-size: 18px; color: #38bdf8; }
+    .firebase-status { background: rgba(20,184,166,.15); border: 1px solid rgba(20,184,166,.45); color: #99f6e4; padding: 9px 12px; border-radius: 10px; font-size: 12px; font-weight: bold; margin-bottom: 10px; text-align: center; }
+    .firebase-warning { background: rgba(245,158,11,.15); border: 1px solid rgba(245,158,11,.45); color: #fef08a; padding: 9px 12px; border-radius: 10px; font-size: 12px; font-weight: bold; margin-bottom: 10px; text-align: center; }
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,.9); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px; pointer-events: auto!important; }
+    .modal-content { background: #1e293b; border: 1px solid #475569; border-radius: 16px; padding: 20px; width: 100%; max-width: 440px; box-shadow: 0 20px 25px -5px rgba(0,0,0,.8); position: relative; z-index: 10000; pointer-events: auto!important; }
+    .modal-content input { pointer-events: auto!important; opacity: 1!important; cursor: text!important; }
+    .modal-content h3 { margin-top: 0; color: #fff; font-size: 18px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+    .user-list-item { display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+    @media (max-width: 600px) {
+      body { padding: 8px; }
+      .header h1 { font-size: 20px; }
+      .form-grid { grid-template-columns: 1fr 1fr; }
+      .form-grid .full-mobile { grid-column: span 2; }
+      .btn-success { font-size: 15px; padding: 12px; }
+      .main-nav { flex-direction: column; }
+      .nav-bar { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body class="app-disabled" id="bodyApp">
+
+<div class="app">
+  <div class="header">
+    <h1>Igualación por Orden de Entrada</h1>
+  </div>
+
+  <div class="main-nav">
+    <button class="nav-tab active" id="tabCarga" onclick="mostrarHoja('carga')">📋 Carga e Igualación</button>
+    <button class="nav-tab" id="tabPublica" onclick="mostrarHoja('publica')">🌍 Cartelera Pública</button>
+  </div>
+
+  <div id="vistaCarga">
+    <div class="user-bar">
+      <div id="userInfo">🔒 <strong>Invitado</strong> (Solo lectura)</div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-admin" id="btnAdminModal" style="display:none;" onclick="abrirAdminModal()">👑 Admin</button>
+        <button class="btn-auth" id="btnAuthAction" onclick="abrirLoginModal()">🔑 Iniciar Sesión</button>
+      </div>
+    </div>
+
+    <div id="bannerBloqueo" class="banner-bloqueo">⚠️ Debe iniciar sesión para cargar gallos e igualar.</div>
+
+    <div class="panel" id="unitPanel">
+      <div class="unit-selector">
+        <button class="unit-btn active" id="unitLbs" onclick="cambiarUnidad('lbs')">Libras / Onzas (Comas)</button>
+        <button class="unit-btn" id="unitKg" onclick="cambiarUnidad('kg')">Gramos</button>
+      </div>
+      <div class="config-grid">
+        <div>
+          <label id="toleranciaLabel">Tolerancia (Onzas):</label>
+          <input type="number" id="toleranciaInput" value="2" onchange="actualizarTolerancia()">
+        </div>
+        <div>
+          <label id="ventajaTuertoLabel">Ventaja Tuerto (Onzas):</label>
+          <input type="number" id="ventajaTuertoInput" value="2" onchange="actualizarTolerancia()">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="inputPanel">
+      <div class="config-grid">
+        <div>
+          <label>País del Evento Público</label>
+          <input type="text" id="orgPaisFirebase" placeholder="Ej: Argentina" value="">
+        </div>
+        <div>
+          <label>Fecha del Evento Público</label>
+          <input type="date" id="orgFechaFirebase">
+        </div>
+        <div>
+          <label>Nombre Torneo / Evento Público</label>
+          <input type="text" id="orgTorneoFirebase" placeholder="Ej: Gran Torneo Río Segundo" value="">
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div>
+          <label>Nombre Stud</label>
+          <input type="text" id="studName" placeholder="Ej: Guillermo" value="">
+        </div>
+        <div>
+          <label>Nombre Gallo</label>
+          <input type="text" id="galloName" placeholder="Ej: El Trueno" value="">
+        </div>
+        <div>
+          <label id="weightLabel">Peso (Ej: 6,10 / 6,8 / 6)</label>
+          <input type="text" id="weight" placeholder="Ej: 6,8" value="">
+        </div>
+        <div>
+          <label>Condición</label>
+          <label class="check-box"><input type="checkbox" id="tuerto"><span>👁️ Tuerto</span></label>
+        </div>
+        <div class="full-mobile">
+          <button class="btn-primary" onclick="addGallo()">➕ Anotar Gallo (Orden #<span id="nextOrder">1</span>)</button>
+        </div>
+      </div>
+      <button class="btn-success" onclick="iniciarIgualacion()">⚡ Realizar Cruces por Orden de Entrada</button>
+      <button class="btn-danger" onclick="limpiarTodoSinClave()">🗑️ Limpiar Fila Completa</button>
+    </div>
+
+    <div class="panel" id="participantesPanel">
+      <div class="section-title"><span>Planilla de Anotación</span><small id="totalRegistrados" style="font-size:12px;color:#38bdf8;">Total: 0</small></div>
+      <div id="studList" class="participants"><div class="empty">No hay ejemplares anotados.</div></div>
+    </div>
+
+    <div id="sorteoPanel" class="panel" style="display:none;">
+      <h2 class="section-title" style="color:#a855f7;">Sorteo Obligatorio (Pesos Exactos)</h2>
+      <div id="sorteoAlerts"></div>
+      <button class="btn-random" onclick="ejecutarSorteoDeImpares()">Sortear e Igualar 🎲</button>
+    </div>
+
+    <div class="panel" id="resultadoPanel" style="display:none;">
+      <div class="nav-bar">
+        <button class="btn-nav" onclick="volverAEditar()">← Volver a la Planilla</button>
+        <h2 style="margin:0;font-size:16px;">Peleas Oficiales</h2>
+      </div>
+      <div id="result"></div>
+      <button class="btn-export-word" onclick="exportarResumenWord()">📄 Descargar Resumen Word (.doc)</button>
+      <button class="btn-export-text" onclick="exportarResumenTexto()">📱 Copiar Resumen Limpio para WhatsApp</button>
+    </div>
+
+    <div id="firebasePublicacionPanel" class="panel" style="display:none;">
+      <div id="firebaseEstadoPublicacion" class="firebase-warning">🌍 Para publicar la cartelera pública, iniciá sesión con un correo Firebase y completá País + Fecha + Torneo.</div>
+      <button class="btn-success" onclick="sincronizarFirebase(true)">🌍 Publicar / Actualizar Cartelera Pública</button>
+    </div>
+  </div>
+
+  <div id="vistaPublica" style="display:none;">
+    <div class="panel">
+      <div class="section-title"><span>🌍 Cartelera Pública Global</span><small id="firebaseEstadoVivo" style="font-size:12px;color:#22c55e;">🔴 En vivo</small></div>
+      <div id="firebaseEstadoLectura" style="display:none;"></div>
+      <div class="config-grid">
+        <div>
+          <label>País</label>
+          <select id="selectPaisPublico" onchange="cargarFechasPorPais()"><option value="">Cargando países...</option></select>
+        </div>
+        <div>
+          <label>Fecha</label>
+          <select id="selectFechaPublica" onchange="cargarTorneosPorPaisFecha()"><option value="">Seleccione un país primero</option></select>
+        </div>
+        <div>
+          <label>Torneo / Evento</label>
+          <select id="selectTorneoPublico" onchange="escucharCarteleraEnVivo()"><option value="">Seleccione una fecha primero</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="section-title"><span>⚔️ Peleas Oficiales Publicadas</span><small id="totalPeleasPublicas" style="font-size:12px;color:#38bdf8;">Total: 0</small></div>
+      <div id="carteleraPublicaContenedor"><div class="empty">Seleccione país, fecha y torneo para ver la cartelera.</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="whatsappModal" class="modal-overlay" style="display:none;">
+  <div class="modal-content">
+    <h3>📱 Resumen Limpio para WhatsApp</h3>
+    <p style="font-size:12px;color:#94a3b8;margin-top:-4px;">Copia este texto y pégalo en tu grupo o chat:</p>
+    <textarea id="whatsappTextarea" rows="10" readonly style="margin-bottom:12px;font-family:monospace;font-size:13px;"></textarea>
+    <button class="btn-primary" onclick="copiarAlPortapapelesModal()">📋 Copiar Texto</button>
+    <button class="btn-nav" style="width:100%;margin-top:8px;" onclick="cerrarWhatsappModal()">Cerrar</button>
+  </div>
+</div>
+
+<div id="loginModal" class="modal-overlay" style="display:none;">
+  <div class="modal-content">
+    <h3>Acceso a la App</h3>
+    <div style="margin-bottom:10px;"><label for="loginUser">Usuario local o correo Firebase</label><input type="text" id="loginUser" autocomplete="username" placeholder="admin / anotador / correo@dominio.com"></div>
+    <div style="margin-bottom:16px;"><label for="loginPass">Contraseña</label><input type="password" id="loginPass" autocomplete="current-password" placeholder="••••••••"></div>
+    <button class="btn-primary" onclick="procesarLogin()">Ingresar</button>
+    <button class="btn-nav" style="width:100%;margin-top:8px;" onclick="cerrarLoginModal()">Cancelar</button>
+  </div>
+</div>
+
+<div id="adminModal" class="modal-overlay" style="display:none;">
+  <div class="modal-content">
+    <h3>👑 Panel Administrador Local</h3>
+    <p style="font-size:12px;color:#94a3b8;margin-top:-6px;">Admin local solo sirve en este navegador. Para publicar global, usar Firebase Auth.</p>
+    <div style="margin-bottom:12px;background:rgba(0,0,0,.2);padding:10px;border-radius:8px;">
+      <label>Nuevo Usuario Local</label>
+      <input type="text" id="newUsername" placeholder="Usuario" style="margin-bottom:6px;">
+      <input type="password" id="newUserPass" placeholder="Contraseña" style="margin-bottom:6px;">
+      <button class="btn-primary" onclick="crearUsuario()">Habilitar Usuario</button>
+    </div>
+    <label>Usuarios Locales:</label>
+    <div id="userListContainer" style="max-height:150px;overflow-y:auto;margin-bottom:12px;"></div>
+    <button class="btn-nav" style="width:100%;" onclick="cerrarAdminModal()">Cerrar</button>
+  </div>
+</div>
+
+<script>
+  // Firebase nuevo creado por Guillermo
+  const firebaseConfig = {
+    apiKey: "AIzaSyBIIzp_M6dBLq2OPfKWOgLX995Slmo3KcI",
+    authDomain: "emparejador-281ad.firebaseapp.com",
+    projectId: "emparejador-281ad",
+    storageBucket: "emparejador-281ad.firebasestorage.app",
+    messagingSenderId: "264177158833",
+    appId: "1:264177158833:web:da3576b9120cf4b5bc7090"
+  };
+
+  const APP_VERSION_KEY = "emparejador_v2_20260723";
+  let auth = null;
+  let db = null;
+  let firebaseOk = false;
+  let desuscripcionCarteleraFirebase = null;
+  let torneosPublicosCache = [];
+
+  let usuariosHabilitados = JSON.parse(localStorage.getItem(`${APP_VERSION_KEY}_usuarios`)) || [
+    { user: "admin", pass: "admin", esAdmin: true },
+    { user: "anotador", pass: "1234", esAdmin: false }
+  ];
+  let usuarioActual = null;
+  let gallosTorneo = [];
+  let peleasActuales = [];
+  let sinParejaActuales = [];
+  let crucesDelSorteo = [];
+  let idCounter = 0;
+  let numeroOrdenGlobal = 1;
+  let unidadMedida = "lbs";
+  let maxDiffMismaCat = 2;
+  let ventajaTuerto = 2;
+
+  function iniciarFirebase() {
+    try {
+      if (typeof firebase === "undefined") throw new Error("SDK de Firebase no cargado. Abrí el archivo con internet activo o publicalo en un hosting.");
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      db = firebase.firestore();
+      firebaseOk = true;
+      const estadoLectura = document.getElementById("firebaseEstadoLectura");
+      if (estadoLectura) estadoLectura.innerText = "";
+      return true;
+    } catch (e) {
+      firebaseOk = false;
+      const msg = "⚠️ Firebase no disponible: " + e.message;
+      const lectura = document.getElementById("firebaseEstadoLectura");
+      if (lectura) lectura.innerText = msg;
+      const pub = document.getElementById("firebaseEstadoPublicacion");
+      if (pub) pub.innerText = msg;
+      return false;
+    }
+  }
+
+  function normalizarFirebase(txt) {
+    return (txt || "").toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ñ/g, "n").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  }
+
+  function fechaHoyISO() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function formatearFechaISO(iso) {
+    if (!iso) return "-";
+    const partes = iso.split("-");
+    if (partes.length !== 3) return iso;
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  }
+
+  function actualizarEstadoPub(msg) {
+    const div = document.getElementById("firebaseEstadoPublicacion");
+    if (div) div.innerText = msg;
+  }
+
+  function claveDatosUsuario() {
+    if (!usuarioActual) return null;
+    const id = usuarioActual.firebase ? usuarioActual.uid : usuarioActual.user.toLowerCase();
+    return `${APP_VERSION_KEY}_data_${id}`;
+  }
+
+  function guardarUsuarios() { localStorage.setItem(`${APP_VERSION_KEY}_usuarios`, JSON.stringify(usuariosHabilitados)); }
+
+  function guardarDatosUsuario() {
+    const key = claveDatosUsuario();
+    if (!key) return;
+    const data = {
+      gallosTorneo, idCounter, numeroOrdenGlobal, unidadMedida, maxDiffMismaCat, ventajaTuerto,
+      pais: document.getElementById("orgPaisFirebase")?.value || "",
+      fecha: document.getElementById("orgFechaFirebase")?.value || "",
+      torneo: document.getElementById("orgTorneoFirebase")?.value || ""
+    };
+    localStorage.setItem(key, JSON.stringify(data));
+  }
+
+  function resetearPlanillaLocal() {
+    gallosTorneo = [];
+    peleasActuales = [];
+    sinParejaActuales = [];
+    crucesDelSorteo = [];
+    idCounter = 0;
+    numeroOrdenGlobal = 1;
+    unidadMedida = "lbs";
+    maxDiffMismaCat = 2;
+    ventajaTuerto = 2;
+    document.getElementById("orgPaisFirebase").value = "";
+    document.getElementById("orgFechaFirebase").value = "";
+    document.getElementById("orgTorneoFirebase").value = "";
+    document.getElementById("studName").value = "";
+    document.getElementById("galloName").value = "";
+    document.getElementById("weight").value = "";
+    document.getElementById("tuerto").checked = false;
+    document.getElementById("toleranciaInput").value = "2";
+    document.getElementById("ventajaTuertoInput").value = "2";
+    document.getElementById("nextOrder").innerText = "1";
+    cambiarUnidad("lbs", false);
+    renderStuds();
+    volverAEditarSilencioso();
+  }
+
+  function cargarDatosUsuario() {
+    resetearPlanillaLocal();
+    const key = claveDatosUsuario();
+    if (!key) return;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const data = JSON.parse(saved);
+      gallosTorneo = data.gallosTorneo || [];
+      idCounter = data.idCounter || 0;
+      numeroOrdenGlobal = data.numeroOrdenGlobal || 1;
+      unidadMedida = data.unidadMedida || "lbs";
+      maxDiffMismaCat = data.maxDiffMismaCat || 2;
+      ventajaTuerto = data.ventajaTuerto || 2;
+      document.getElementById("orgPaisFirebase").value = data.pais || "";
+      document.getElementById("orgFechaFirebase").value = data.fecha || "";
+      document.getElementById("orgTorneoFirebase").value = data.torneo || "";
+      document.getElementById("toleranciaInput").value = maxDiffMismaCat;
+      document.getElementById("ventajaTuertoInput").value = ventajaTuerto;
+      cambiarUnidad(unidadMedida, false);
+    }
+    document.getElementById("nextOrder").innerText = numeroOrdenGlobal;
+    renderStuds();
+  }
+
+  function mostrarHoja(hoja) {
+    const carga = hoja === "carga";
+    document.getElementById("vistaCarga").style.display = carga ? "block" : "none";
+    document.getElementById("vistaPublica").style.display = carga ? "none" : "block";
+    document.getElementById("tabCarga").classList.toggle("active", carga);
+    document.getElementById("tabPublica").classList.toggle("active", !carga);
+    if (!carga) cargarPaisesPublicos();
+  }
+
+  function abrirLoginModal() { document.getElementById("loginModal").style.display = "flex"; setTimeout(() => document.getElementById("loginUser").focus(), 100); }
+  function cerrarLoginModal() { document.getElementById("loginModal").style.display = "none"; }
+
+  async function procesarLogin() {
+    const uRaw = document.getElementById("loginUser").value.trim();
+    const u = uRaw.toLowerCase();
+    const p = document.getElementById("loginPass").value.trim();
+    if (!uRaw || !p) { alert("Complete usuario/correo y contraseña."); return; }
+
+    if (uRaw.includes("@")) {
+      if (!firebaseOk && !iniciarFirebase()) { alert("Firebase no está disponible. Revisá internet y que el HTML no esté dentro de un iframe bloqueado."); return; }
+      try {
+        const cred = await auth.signInWithEmailAndPassword(uRaw, p);
+        usuarioActual = { user: cred.user.email, uid: cred.user.uid, esAdmin: false, firebase: true };
+        actualizarEstadoSesion(); cargarDatosUsuario(); cerrarLoginModal();
+        document.getElementById("loginUser").value = ""; document.getElementById("loginPass").value = "";
+        document.getElementById("firebasePublicacionPanel").style.display = "block";
+        actualizarEstadoPub("✅ Sesión Firebase activa. Tu planilla es privada de este usuario. Ya podés publicar la cartelera pública.");
+      } catch (e) { alert("Error de Firebase Auth: " + e.message); }
+      return;
+    }
+
+    const encontrado = usuariosHabilitados.find(x => x.user.toLowerCase() === u && x.pass === p);
+    if (encontrado) {
+      usuarioActual = encontrado;
+      actualizarEstadoSesion(); cargarDatosUsuario(); cerrarLoginModal();
+      document.getElementById("loginUser").value = ""; document.getElementById("loginPass").value = "";
+      document.getElementById("firebasePublicacionPanel").style.display = "block";
+      actualizarEstadoPub("⚠️ Sesión local activa. Esta planilla queda solo en este navegador. Para publicar global, iniciá con correo Firebase.");
+    } else alert("Usuario no autorizado o credenciales incorrectas.");
+  }
+
+  function cerrarSesion() {
+    const eraFirebase = usuarioActual && usuarioActual.firebase;
+    usuarioActual = null;
+    resetearPlanillaLocal();
+    actualizarEstadoSesion();
+    document.getElementById("firebasePublicacionPanel").style.display = "none";
+    actualizarEstadoPub("🌍 Para publicar la cartelera pública, iniciá sesión con correo Firebase y completá País + Fecha + Torneo.");
+    if (eraFirebase && auth) auth.signOut().catch(() => {});
+  }
+
+  function actualizarEstadoSesion() {
+    const body = document.getElementById("bodyApp");
+    const userInfo = document.getElementById("userInfo");
+    const btnAuth = document.getElementById("btnAuthAction");
+    const btnAdmin = document.getElementById("btnAdminModal");
+    const banner = document.getElementById("bannerBloqueo");
+    if (usuarioActual) {
+      body.classList.remove("app-disabled"); banner.style.display = "none";
+      userInfo.innerHTML = `👤 <strong>${usuarioActual.user}</strong> ${usuarioActual.esAdmin ? '(Admin local)' : ''} ${usuarioActual.firebase ? '(Firebase)' : ''}`;
+      btnAuth.innerText = "🚪 Salir"; btnAuth.onclick = cerrarSesion;
+      btnAdmin.style.display = usuarioActual.esAdmin ? "inline-block" : "none";
+    } else {
+      body.classList.add("app-disabled"); banner.style.display = "block";
+      userInfo.innerHTML = `🔒 <strong>Invitado</strong> (Solo lectura)`;
+      btnAuth.innerText = "🔑 Iniciar Sesión"; btnAuth.onclick = abrirLoginModal;
+      btnAdmin.style.display = "none";
+    }
+  }
+
+  function abrirAdminModal() { if (!usuarioActual || !usuarioActual.esAdmin) return; renderUserList(); document.getElementById("adminModal").style.display = "flex"; }
+  function cerrarAdminModal() { document.getElementById("adminModal").style.display = "none"; }
+  function crearUsuario() {
+    const u = document.getElementById("newUsername").value.trim();
+    const p = document.getElementById("newUserPass").value.trim();
+    if (!u || !p) { alert("Complete usuario y contraseña"); return; }
+    if (usuariosHabilitados.some(x => x.user.toLowerCase() === u.toLowerCase())) { alert("El usuario ya existe."); return; }
+    usuariosHabilitados.push({ user: u, pass: p, esAdmin: false }); guardarUsuarios(); renderUserList();
+    document.getElementById("newUsername").value = ""; document.getElementById("newUserPass").value = "";
+  }
+  function eliminarUsuario(uName) {
+    if (uName.toLowerCase() === "admin") { alert("No se puede eliminar el usuario Admin principal."); return; }
+    usuariosHabilitados = usuariosHabilitados.filter(x => x.user.toLowerCase() !== uName.toLowerCase()); guardarUsuarios(); renderUserList();
+  }
+  function renderUserList() {
+    const container = document.getElementById("userListContainer"); let html = "";
+    usuariosHabilitados.forEach(u => html += `<div class="user-list-item"><span><strong>${u.user}</strong> ${u.esAdmin ? '(Admin)' : ''}</span>${!u.esAdmin ? `<button class="btn-edit" style="background:#dc2626;color:white;border:none;" onclick="eliminarUsuario('${u.user}')">❌</button>` : ''}</div>`);
+    container.innerHTML = html;
+  }
+
+  function cambiarUnidad(unidad, guardar = true) {
+    unidadMedida = unidad;
+    if (unidad === "lbs") {
+      document.getElementById("weightLabel").innerText = "Peso (Ej: 6,10 / 6,8 / 6)";
+      document.getElementById("weight").placeholder = "Ej: 6,8";
+      document.getElementById("unitLbs").classList.add("active"); document.getElementById("unitKg").classList.remove("active");
+      document.getElementById("toleranciaLabel").innerText = "Tolerancia (Onzas):";
+      document.getElementById("ventajaTuertoLabel").innerText = "Ventaja Tuerto (Onzas):";
+    } else {
+      document.getElementById("weightLabel").innerText = "Peso Gramos (Ej: 1814)";
+      document.getElementById("weight").placeholder = "Ej: 1814";
+      document.getElementById("unitKg").classList.add("active"); document.getElementById("unitLbs").classList.remove("active");
+      document.getElementById("toleranciaLabel").innerText = "Tolerancia (Gramos):";
+      document.getElementById("ventajaTuertoLabel").innerText = "Ventaja Tuerto (Gramos):";
+    }
+    if (guardar) guardarDatosUsuario();
+  }
+
+  function actualizarTolerancia() {
+    maxDiffMismaCat = parseFloat(document.getElementById("toleranciaInput").value) || 0;
+    ventajaTuerto = parseFloat(document.getElementById("ventajaTuertoInput").value) || 0;
+    guardarDatosUsuario();
+  }
+
+  function parsearPesoAbsoluto(rawInput) {
+    if (!rawInput) return NaN;
+    let str = rawInput.toString().trim().replace(".", ",");
+    if (unidadMedida === "lbs") {
+      let lbs = 0, oz = 0;
+      if (str.includes(",")) {
+        const partes = str.split(","); lbs = parseInt(partes[0], 10); oz = partes[1].trim() === "" ? 0 : parseInt(partes[1].trim(), 10);
+      } else {
+        const val = parseInt(str, 10); if (isNaN(val)) return NaN;
+        if (str.length === 1) { lbs = val; oz = 0; }
+        else if (str.length === 3) { lbs = parseInt(str.charAt(0), 10); oz = parseInt(str.substring(1), 10); }
+        else if (str.length === 4) { lbs = parseInt(str.substring(0, 2), 10); oz = parseInt(str.substring(2), 10); }
+        else return NaN;
+      }
+      if (isNaN(lbs) || isNaN(oz) || lbs < 4 || lbs > 8 || oz >= 16) return NaN;
+      return (lbs * 16) + oz;
+    }
+    const val = parseInt(str, 10); if (isNaN(val) || val <= 0) return NaN; return val;
+  }
+
+  function formatearPesoEntrada(pesoAbs) {
+    if (unidadMedida === "lbs") {
+      const lbs = Math.floor(pesoAbs / 16); const oz = pesoAbs % 16; const ozFormat = oz < 10 ? `0${oz}` : `${oz}`;
+      return `${lbs},${ozFormat} (${lbs}lb ${oz}oz)`;
+    }
+    return `${pesoAbs}g`;
+  }
+  function formatearPesoLimpio(pesoAbs) {
+    if (unidadMedida === "lbs") { const lbs = Math.floor(pesoAbs / 16); const oz = pesoAbs % 16; return `${lbs},${oz < 10 ? `0${oz}` : oz}`; }
+    return `${pesoAbs}g`;
+  }
+
+  function addGallo() {
+    if (!usuarioActual) return;
+    const studName = document.getElementById("studName").value.trim().toUpperCase();
+    const galloName = document.getElementById("galloName").value.trim();
+    const rawWeight = document.getElementById("weight").value.trim();
+    const tuerto = document.getElementById("tuerto").checked;
+    if (!studName || !galloName || !rawWeight) { alert("Por favor complete todos los datos."); return; }
+    const pesoAbsoluto = parsearPesoAbsoluto(rawWeight);
+    if (isNaN(pesoAbsoluto)) { alert("Formato de peso inválido."); return; }
+    gallosTorneo.push({ id: idCounter++, orden: numeroOrdenGlobal++, stud: studName, nombre: galloName, pesoAbs: pesoAbsoluto, pesoRaw: rawWeight, tuerto, usado: false });
+    document.getElementById("nextOrder").innerText = numeroOrdenGlobal;
+    guardarDatosUsuario(); renderStuds();
+    document.getElementById("galloName").value = ""; document.getElementById("weight").value = ""; document.getElementById("tuerto").checked = false; document.getElementById("galloName").focus();
+  }
+
+  function editarGallo(idGallo) {
+    if (!usuarioActual) return;
+    const index = gallosTorneo.findIndex(g => g.id === idGallo);
+    if (index !== -1) {
+      const g = gallosTorneo[index];
+      document.getElementById("studName").value = g.stud; document.getElementById("galloName").value = g.nombre; document.getElementById("weight").value = g.pesoRaw; document.getElementById("tuerto").checked = g.tuerto;
+      gallosTorneo.splice(index, 1); guardarDatosUsuario(); renderStuds();
+    }
+  }
+
+  function renderStuds() {
+    const contenedor = document.getElementById("studList"); document.getElementById("totalRegistrados").innerText = `Total: ${gallosTorneo.length}`;
+    if (gallosTorneo.length === 0) { contenedor.innerHTML = `<div class="empty">No hay ejemplares anotados.</div>`; return; }
+    const studsGroup = {};
+    gallosTorneo.forEach(g => { if (!studsGroup[g.stud]) studsGroup[g.stud] = []; studsGroup[g.stud].push(g); });
+    let html = "";
+    for (let stud in studsGroup) {
+      html += `<div class="stud-card"><h3>${stud}</h3>`;
+      studsGroup[stud].forEach(g => html += `<div class="gallo-item"><div><span class="order-badge">#${g.orden}</span><strong>${g.nombre}</strong> — ${formatearPesoEntrada(g.pesoAbs)} ${g.tuerto ? `<span class="tag-tuerto">👁️ Tuerto</span>` : ""}</div><button class="btn-edit" onclick="editarGallo(${g.id})">✏️ Editar</button></div>`);
+      html += `</div>`;
+    }
+    contenedor.innerHTML = html;
+  }
+
+  function analizarImparesExactos(listaActiva) {
+    const conteo = {};
+    listaActiva.forEach(g => { const clave = `${g.pesoAbs}_${g.tuerto ? "T" : "N"}`; if (!conteo[clave]) conteo[clave] = []; conteo[clave].push(g); });
+    let htmlAlerts = ""; let hayImpares = false;
+    for (let clave in conteo) {
+      const grupo = conteo[clave];
+      if (grupo.length % 2 !== 0 && grupo.length > 1) {
+        hayImpares = true;
+        const pesoLabel = formatearPesoEntrada(parseInt(clave.split("_")[0], 10));
+        const catLabel = clave.split("_")[1] === "T" ? "Tuertos" : "Normales";
+        htmlAlerts += `<div class="alert-card">⚠️ <strong>Grupo Impar:</strong> ${grupo.length} ejemplares de peso idéntico: <strong>${pesoLabel}</strong> (${catLabel}).</div>`;
+      }
+    }
+    document.getElementById("sorteoPanel").style.display = hayImpares ? "block" : "none";
+    if (hayImpares) document.getElementById("sorteoAlerts").innerHTML = htmlAlerts;
+  }
+
+  function iniciarIgualacion() {
+    if (!usuarioActual) return;
+    if (gallosTorneo.length < 2) { alert("Se requieren mínimo 2 participantes."); return; }
+    document.getElementById("inputPanel").style.display = "none"; document.getElementById("unitPanel").style.display = "none"; document.getElementById("participantesPanel").style.display = "none"; document.getElementById("resultadoPanel").style.display = "block"; document.getElementById("firebasePublicacionPanel").style.display = "block";
+    crucesDelSorteo = []; analizarImparesExactos(gallosTorneo); igualarPorOrdenAscendente(gallosTorneo);
+  }
+
+  function ejecutarSorteoDeImpares() {
+    if (!usuarioActual) return;
+    crucesDelSorteo = []; gallosTorneo.forEach(g => g.usado = false);
+    const conteo = {}; gallosTorneo.forEach(g => { const clave = `${g.pesoAbs}_${g.tuerto ? "T" : "N"}`; if (!conteo[clave]) conteo[clave] = []; conteo[clave].push(g); });
+    for (let clave in conteo) {
+      const grupo = conteo[clave];
+      if (grupo.length % 2 !== 0 && grupo.length > 1) {
+        const listaMezclada = [...grupo].sort(() => Math.random() - .5);
+        for (let i = 0; i < listaMezclada.length; i++) {
+          const g1 = listaMezclada[i]; if (g1.usado) continue;
+          for (let j = i + 1; j < listaMezclada.length; j++) {
+            const g2 = listaMezclada[j]; if (g2.usado || g1.stud === g2.stud) continue;
+            g1.usado = true; g2.usado = true;
+            crucesDelSorteo.push({ idCruce: "srt_" + Math.random().toString(36).substr(2,5), a: g1, b: g2, diff: 0, tipo: g1.tuerto ? "Tuerto vs Tuerto" : "Normal vs Normal", esSorteo: true, esMixto: false });
+            break;
+          }
+        }
+      }
+    }
+    document.getElementById("sorteoPanel").style.display = "none"; igualarPorOrdenAscendente(gallosTorneo, true);
+  }
+
+  function igualarPorOrdenAscendente(lista, vieneDeSorteo = false) {
+    actualizarTolerancia();
+    if (!vieneDeSorteo) { lista.forEach(g => g.usado = false); peleasActuales = []; } else peleasActuales = [...crucesDelSorteo];
+    const colaEfectiva = [...lista].sort((a,b) => a.orden - b.orden);
+    for (let i = 0; i < colaEfectiva.length; i++) {
+      const g1 = colaEfectiva[i]; if (g1.usado) continue;
+      let rivalEncontrado = null; let desvioRival = Infinity; let esMixtoMatch = false;
+      for (let j = i + 1; j < colaEfectiva.length; j++) {
+        const g2 = colaEfectiva[j]; if (g2.usado || g1.stud.toUpperCase() === g2.stud.toUpperCase()) continue;
+        if (g1.tuerto === g2.tuerto) {
+          const diff = Math.abs(g1.pesoAbs - g2.pesoAbs);
+          if (diff <= maxDiffMismaCat) { rivalEncontrado = g2; desvioRival = diff; esMixtoMatch = false; break; }
+        } else {
+          const tuerto = g1.tuerto ? g1 : g2; const normal = g1.tuerto ? g2 : g1;
+          const pesoEsperadoNormal = tuerto.pesoAbs - ventajaTuerto;
+          const desvio = Math.abs(normal.pesoAbs - pesoEsperadoNormal);
+          if (desvio <= maxDiffMismaCat) { rivalEncontrado = g2; desvioRival = Math.abs(g1.pesoAbs - g2.pesoAbs); esMixtoMatch = true; break; }
+        }
+      }
+      if (rivalEncontrado) {
+        g1.usado = true; rivalEncontrado.usado = true;
+        peleasActuales.push({ idCruce: "ord_" + Math.random().toString(36).substr(2,5), a: g1, b: rivalEncontrado, diff: desvioRival, tipo: esMixtoMatch ? "Mixto (Tuerto vs Normal)" : (g1.tuerto ? "Tuerto vs Tuerto" : "Normal vs Normal"), esSorteo: false, esMixto: esMixtoMatch });
+      }
+    }
+    sinParejaActuales = lista.filter(g => !g.usado).sort((a,b) => a.orden - b.orden);
+    renderResultadosTorneo();
+  }
+
+  function volverAEditar() { volverAEditarSilencioso(); }
+  function volverAEditarSilencioso() {
+    document.getElementById("inputPanel").style.display = "block"; document.getElementById("unitPanel").style.display = "block"; document.getElementById("participantesPanel").style.display = "block"; document.getElementById("resultadoPanel").style.display = "none"; document.getElementById("sorteoPanel").style.display = "none";
+  }
+
+  function renderResultadosTorneo() {
+    const result = document.getElementById("result");
+    let html = `<div class="summary"><div class="summary-card"><strong>${peleasActuales.length}</strong><span>Peleas</span></div><div class="summary-card"><strong>${sinParejaActuales.length}</strong><span>Sin Rival</span></div></div>`;
+    if (peleasActuales.length > 0) {
+      html += `<div class="results-grid">`;
+      peleasActuales.forEach(p => {
+        const cardClass = p.esSorteo ? "sorteo-sorteado" : (p.esMixto ? "cruce-mixto" : "");
+        const unidadTexto = unidadMedida === "lbs" ? "oz" : "g";
+        let badgeLabel = `Δ ${p.diff} ${unidadTexto}`;
+        if (p.esSorteo) badgeLabel = "Sorteo 🎲";
+        if (p.esMixto) badgeLabel = `Ventaja (${ventajaTuerto} ${unidadTexto}) ⚖️`;
+        html += `<div class="match-card ${cardClass}"><div class="match-head"><strong>${p.tipo}</strong><span class="badge ${p.esSorteo ? "badge-sorteo" : ""} ${p.esMixto ? "badge-mixto" : ""}">${badgeLabel}</span></div><div class="fighter"><span class="order-badge">#${p.a.orden}</span><strong>${p.a.stud}</strong> (${p.a.nombre}) ${p.a.tuerto ? `<span class="tag-tuerto">👁️ Tuerto</span>` : ""}<br><span>Peso: ${formatearPesoEntrada(p.a.pesoAbs)}</span></div><div class="vs">VS</div><div class="fighter"><span class="order-badge">#${p.b.orden}</span><strong>${p.b.stud}</strong> (${p.b.nombre}) ${p.b.tuerto ? `<span class="tag-tuerto">👁️ Tuerto</span>` : ""}<br><span>Peso: ${formatearPesoEntrada(p.b.pesoAbs)}</span></div></div>`;
+      });
+      html += `</div>`;
+    } else html += `<div class="empty">No se encontraron rivales dentro de la tolerancia elegida.</div>`;
+    html += `<h3 style="margin-top:20px;font-size:15px;">Ejemplares Libres (Esperando Turno)</h3>`;
+    if (sinParejaActuales.length > 0) sinParejaActuales.forEach(g => html += `<div class="unpaired"><span class="order-badge">#${g.orden}</span><strong>${g.stud}</strong> (${g.nombre}) - Peso: ${formatearPesoEntrada(g.pesoAbs)} ${g.tuerto ? `<span class="tag-tuerto">👁️ Tuerto</span>` : ""}</div>`);
+    else html += `<div class="empty">¡Excelente! Todos los ejemplares fueron casados.</div>`;
+    result.innerHTML = html;
+  }
+
+  function construirPeleasFirebase() {
+    const unidadTexto = unidadMedida === "lbs" ? "oz" : "g";
+    return peleasActuales.map((p, idx) => ({ numero: idx + 1, ordenA: p.a.orden, studA: p.a.stud, galloA: p.a.nombre, pesoA: formatearPesoEntrada(p.a.pesoAbs), pesoLimpioA: formatearPesoLimpio(p.a.pesoAbs), tuertoA: !!p.a.tuerto, ordenB: p.b.orden, studB: p.b.stud, galloB: p.b.nombre, pesoB: formatearPesoEntrada(p.b.pesoAbs), pesoLimpioB: formatearPesoLimpio(p.b.pesoAbs), tuertoB: !!p.b.tuerto, diferencia: p.diff, unidadDiferencia: unidadTexto, tipo: p.tipo, esSorteo: !!p.esSorteo, esMixto: !!p.esMixto }));
+  }
+  function construirLibresFirebase() { return sinParejaActuales.map(g => ({ orden: g.orden, stud: g.stud, nombre: g.nombre, peso: formatearPesoEntrada(g.pesoAbs), pesoLimpio: formatearPesoLimpio(g.pesoAbs), tuerto: !!g.tuerto })); }
+
+  async function sincronizarFirebase(forzarMensaje = false) {
+    if (!usuarioActual || !usuarioActual.firebase) { if (forzarMensaje) alert("Para publicar necesitás iniciar sesión con un correo autorizado en Firebase."); return; }
+    if (!firebaseOk && !iniciarFirebase()) { if (forzarMensaje) alert("Firebase no está disponible."); return; }
+    const pais = document.getElementById("orgPaisFirebase").value.trim();
+    const fechaEvento = document.getElementById("orgFechaFirebase").value || fechaHoyISO();
+    const torneo = document.getElementById("orgTorneoFirebase").value.trim();
+    if (!pais || !fechaEvento || !torneo) { if (forzarMensaje) alert("Complete País, Fecha y Nombre del Torneo."); actualizarEstadoPub("⚠️ Falta completar País, Fecha y Torneo."); return; }
+    if (peleasActuales.length === 0 && sinParejaActuales.length === 0) { if (forzarMensaje) alert("Primero realice la igualación."); actualizarEstadoPub("⚠️ Todavía no hay resultados para publicar."); return; }
+    const paisSlug = normalizarFirebase(pais);
+    const torneoSlug = normalizarFirebase(torneo);
+    const fechaSlug = fechaEvento;
+    const uidCorto = usuarioActual.uid.substring(0, 10);
+    const docId = `${paisSlug}_${fechaSlug}_${torneoSlug}_${uidCorto}`;
+    const payload = { pais, paisSlug, fechaEvento, fechaSlug, fechaLabel: formatearFechaISO(fechaEvento), nombreTorneo: torneo, torneoSlug, organizadorUid: usuarioActual.uid, organizadorEmail: usuarioActual.user, publicado: true, unidadMedida, tolerancia: maxDiffMismaCat, ventajaTuerto, peleas: construirPeleasFirebase(), sinPareja: construirLibresFirebase(), totalPeleas: peleasActuales.length, totalSinPareja: sinParejaActuales.length, ultimaActualizacion: firebase.firestore.FieldValue.serverTimestamp() };
+    try {
+      await db.collection("torneos").doc(docId).set(payload, { merge: true });
+      guardarDatosUsuario();
+      actualizarEstadoPub(`✅ Cartelera pública actualizada: ${pais} / ${formatearFechaISO(fechaEvento)} / ${torneo}`);
+      if (forzarMensaje) alert("¡Cartelera publicada/actualizada correctamente!");
+      cargarPaisesPublicos();
+    } catch (e) { actualizarEstadoPub("❌ Error al publicar: " + e.message); if (forzarMensaje) alert("Error al publicar: " + e.message); }
+  }
+
+  async function obtenerTorneosPublicados() {
+    if (!firebaseOk && !iniciarFirebase()) return [];
+    try {
+      const snap = await db.collection("torneos").where("publicado", "==", true).get();
+      const docs = [];
+      snap.forEach(doc => docs.push({ id: doc.id, ...doc.data() }));
+      torneosPublicosCache = docs;
+      return docs;
+    } catch (e) {
+      const contenedor = document.getElementById("carteleraPublicaContenedor");
+      if (contenedor) contenedor.innerHTML = `<div class="empty">Error al cargar cartelera pública: ${e.message}</div>`;
+      return [];
+    }
+  }
+
+  async function cargarPaisesPublicos() {
+    const select = document.getElementById("selectPaisPublico"); if (!select) return;
+    const actual = select.value;
+    const docs = await obtenerTorneosPublicados();
+    const paisesSet = new Set(docs.map(d => d.pais).filter(Boolean));
+    const paisesBase = ["Argentina", "México", "Colombia", "Perú", "Ecuador", "República Dominicana", "Puerto Rico", "Estados Unidos", "Bolivia", "Chile", "Paraguay", "Uruguay", "Brasil", "Venezuela", "Panamá", "Costa Rica", "Nicaragua", "Honduras", "El Salvador", "Guatemala"];
+    paisesBase.forEach(p => paisesSet.add(p));
+    const paises = Array.from(paisesSet).sort((a,b) => a.localeCompare(b, "es"));
+    select.innerHTML = `<option value="">Seleccione país</option>`;
+    paises.forEach(p => { const opt = document.createElement("option"); opt.value = p; opt.innerText = p; if (p === actual) opt.selected = true; select.appendChild(opt); });
+    cargarFechasPorPais();
+  }
+
+  function cargarFechasPorPais() {
+    const pais = document.getElementById("selectPaisPublico").value;
+    const selectFecha = document.getElementById("selectFechaPublica");
+    const selectTorneo = document.getElementById("selectTorneoPublico");
+    const contenedor = document.getElementById("carteleraPublicaContenedor");
+    if (desuscripcionCarteleraFirebase) { desuscripcionCarteleraFirebase(); desuscripcionCarteleraFirebase = null; }
+    selectFecha.innerHTML = `<option value="">Seleccione fecha</option>`;
+    selectTorneo.innerHTML = `<option value="">Seleccione una fecha primero</option>`;
+    document.getElementById("totalPeleasPublicas").innerText = "Total: 0";
+    if (!pais) { contenedor.innerHTML = `<div class="empty">Seleccione país, fecha y torneo para ver la cartelera.</div>`; return; }
+
+    const paisSlug = normalizarFirebase(pais);
+    const fechas = [...new Set(torneosPublicosCache.filter(d => d.paisSlug === paisSlug && d.publicado === true).map(d => d.fechaSlug || d.fechaEvento).filter(Boolean))].sort().reverse();
+    if (fechas.length === 0) { contenedor.innerHTML = `<div class="empty">No hay fechas publicadas para ${pais}.</div>`; return; }
+    fechas.forEach(f => { const opt = document.createElement("option"); opt.value = f; opt.innerText = formatearFechaISO(f); selectFecha.appendChild(opt); });
+  }
+
+  function cargarTorneosPorPaisFecha() {
+    const pais = document.getElementById("selectPaisPublico").value;
+    const fecha = document.getElementById("selectFechaPublica").value;
+    const selectTorneo = document.getElementById("selectTorneoPublico");
+    const contenedor = document.getElementById("carteleraPublicaContenedor");
+    if (desuscripcionCarteleraFirebase) { desuscripcionCarteleraFirebase(); desuscripcionCarteleraFirebase = null; }
+    selectTorneo.innerHTML = `<option value="">Seleccione torneo</option>`;
+    document.getElementById("totalPeleasPublicas").innerText = "Total: 0";
+    if (!pais || !fecha) { contenedor.innerHTML = `<div class="empty">Seleccione país, fecha y torneo para ver la cartelera.</div>`; return; }
+    const paisSlug = normalizarFirebase(pais);
+    const lista = torneosPublicosCache.filter(d => d.paisSlug === paisSlug && (d.fechaSlug || d.fechaEvento) === fecha && d.publicado === true).sort((a,b) => (a.nombreTorneo || "").localeCompare(b.nombreTorneo || "", "es"));
+    if (lista.length === 0) { contenedor.innerHTML = `<div class="empty">No hay torneos publicados para ${pais} el ${formatearFechaISO(fecha)}.</div>`; return; }
+    lista.forEach(data => { const opt = document.createElement("option"); opt.value = data.id; opt.innerText = data.nombreTorneo || data.id; selectTorneo.appendChild(opt); });
+    escucharCarteleraEnVivo();
+  }
+
+  function escucharCarteleraEnVivo() {
+    if (!firebaseOk && !iniciarFirebase()) return;
+    const idTorneo = document.getElementById("selectTorneoPublico").value;
+    const contenedor = document.getElementById("carteleraPublicaContenedor");
+    if (desuscripcionCarteleraFirebase) { desuscripcionCarteleraFirebase(); desuscripcionCarteleraFirebase = null; }
+    if (!idTorneo) { contenedor.innerHTML = `<div class="empty">Seleccione un torneo.</div>`; document.getElementById("totalPeleasPublicas").innerText = "Total: 0"; return; }
+    desuscripcionCarteleraFirebase = db.collection("torneos").doc(idTorneo).onSnapshot(doc => {
+      if (!doc.exists) { contenedor.innerHTML = `<div class="empty">El torneo seleccionado ya no existe.</div>`; document.getElementById("totalPeleasPublicas").innerText = "Total: 0"; return; }
+      const data = doc.data(); const peleas = data.peleas || []; const libres = data.sinPareja || [];
+      document.getElementById("totalPeleasPublicas").innerText = `Total: ${peleas.length}`;
+      let fechaActualizacion = "";
+      if (data.ultimaActualizacion) {
+        try { fechaActualizacion = data.ultimaActualizacion.toDate().toLocaleString("es-AR"); } catch (e) {}
+      }
+      const fechaEvento = data.fechaLabel || formatearFechaISO(data.fechaEvento || data.fechaSlug);
+      let html = `<div class="firebase-status">Evento: ${data.nombreTorneo || "Sin nombre"}<br>País: ${data.pais || "-"}<br>Fecha del evento: ${fechaEvento || "-"}<br>Actualizado: ${fechaActualizacion || "-"}</div>`;
+      if (peleas.length > 0) {
+        html += `<div class="results-grid">`;
+        peleas.forEach((p, idx) => html += `<div class="match-card ${p.esSorteo ? "sorteo-sorteado" : ""} ${p.esMixto ? "cruce-mixto" : ""}"><div class="match-head"><strong>Pelea #${idx + 1}</strong><span class="badge ${p.esSorteo ? "badge-sorteo" : ""} ${p.esMixto ? "badge-mixto" : ""}">${p.tipo || "Cruce"}</span></div><div class="fighter"><span class="order-badge">#${p.ordenA}</span><strong>${p.studA}</strong> (${p.galloA}) ${p.tuertoA ? `<span class="tag-tuerto">👁️ Tuerto</span>` : ""}<br><span>Peso: ${p.pesoA}</span></div><div class="vs">VS</div><div class="fighter"><span class="order-badge">#${p.ordenB}</span><strong>${p.studB}</strong> (${p.galloB}) ${p.tuertoB ? `<span class="tag-tuerto">👁️ Tuerto</span>` : ""}<br><span>Peso: ${p.pesoB}</span></div><div style="color:#94a3b8;font-size:11px;margin-top:4px;">Diferencia: ${p.diferencia || 0} ${p.unidadDiferencia || ""}</div></div>`);
+        html += `</div>`;
+      } else html += `<div class="empty">El organizador todavía no publicó peleas.</div>`;
+      if (libres.length > 0) { html += `<h3 style="margin-top:20px;font-size:15px;">Ejemplares Libres</h3>`; libres.forEach(g => html += `<div class="public-unpaired"><span class="order-badge">#${g.orden}</span><strong>${g.stud}</strong> (${g.nombre}) - Peso: ${g.peso} ${g.tuerto ? `<span class="tag-tuerto">👁️ Tuerto</span>` : ""}</div>`); }
+      contenedor.innerHTML = html;
+    }, error => { contenedor.innerHTML = `<div class="empty">Error de lectura Firebase: ${error.message}</div>`; document.getElementById("totalPeleasPublicas").innerText = "Total: 0"; });
+  }
+
+  function exportarResumenWord() {
+    if (peleasActuales.length === 0 && sinParejaActuales.length === 0) { alert("No hay peleas para exportar."); return; }
+    const uText = unidadMedida === "lbs" ? "oz" : "g"; const fecha = new Date().toLocaleDateString("es-ES");
+    let htmlDocument = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Cartelera de Peleas</title><style>body{font-family:Arial,sans-serif;padding:20px;}h1{text-align:center;color:#0f172a;font-size:20pt;margin-bottom:5px}.sub{text-align:center;color:#475569;font-size:10pt;margin-bottom:20px}table{width:100%;border-collapse:collapse;margin-bottom:20px}th{background:#1e293b;color:white;padding:8px;font-size:10pt;border:1px solid #0f172a}td{border:1px solid #94a3b8;padding:8px;font-size:10pt;text-align:left;vertical-align:middle}.vs-col{text-align:center;font-weight:bold;color:#2563eb;width:8%}.num-col{text-align:center;font-weight:bold;width:6%}</style></head><body><h1>CARTELERA OFICIAL DE PELEAS</h1><div class='sub'>Fecha: ${fecha} | Tolerancia: ${maxDiffMismaCat}${uText} | Ventaja Tuerto: ${ventajaTuerto}${uText}</div><table><thead><tr><th class='num-col'>#</th><th>GALLO ESQUINA ROJA</th><th class='vs-col'>VS</th><th>GALLO ESQUINA AZUL</th></tr></thead><tbody>`;
+    peleasActuales.forEach((p, idx) => { const tA = p.a.tuerto ? " (TUERTO)" : ""; const tB = p.b.tuerto ? " (TUERTO)" : ""; htmlDocument += `<tr><td class='num-col'>${idx+1}</td><td>(#${p.a.orden}) <b>${p.a.stud}</b> - ${p.a.nombre}${tA}<br>Peso: ${formatearPesoEntrada(p.a.pesoAbs)}</td><td class='vs-col'>VS</td><td>(#${p.b.orden}) <b>${p.b.stud}</b> - ${p.b.nombre}${tB}<br>Peso: ${formatearPesoEntrada(p.b.pesoAbs)}</td></tr>`; });
+    htmlDocument += `</tbody></table>`;
+    if (sinParejaActuales.length > 0) { htmlDocument += `<h3>EJEMPLARES LIBRES (SIN RIVAL)</h3><table><thead><tr><th class='num-col'>Orden</th><th>Stud / Nombre</th><th>Peso</th></tr></thead><tbody>`; sinParejaActuales.forEach(g => htmlDocument += `<tr><td class='num-col'>#${g.orden}</td><td><b>${g.stud}</b> - ${g.nombre}${g.tuerto ? " (TUERTO)" : ""}</td><td>${formatearPesoEntrada(g.pesoAbs)}</td></tr>`); htmlDocument += `</tbody></table>`; }
+    htmlDocument += `</body></html>`;
+    const blob = new Blob(["\ufeff" + htmlDocument], { type: "application/msword" }); const filename = `Cartelera_Peleas_${fecha.replace(/\//g,"-")}.doc`;
+    const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = filename; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  }
+
+  function exportarResumenTexto() {
+    if (peleasActuales.length === 0 && sinParejaActuales.length === 0) { alert("No hay peleas para exportar."); return; }
+    let txt = `CARTELERA OFICIAL DE PELEAS\n\n`;
+    peleasActuales.forEach((p, idx) => { txt += `PELEA #${idx+1}\n`; txt += `(#${p.a.orden}) ${p.a.stud} - ${p.a.nombre}${p.a.tuerto ? " Tuerto" : ""} (${formatearPesoLimpio(p.a.pesoAbs)})\n`; txt += `VS\n`; txt += `(#${p.b.orden}) ${p.b.stud} - ${p.b.nombre}${p.b.tuerto ? " Tuerto" : ""} (${formatearPesoLimpio(p.b.pesoAbs)})\n\n`; });
+    if (sinParejaActuales.length > 0) { txt += `EJEMPLARES LIBRES:\n`; sinParejaActuales.forEach(g => txt += `• (#${g.orden}) ${g.stud} - ${g.nombre}${g.tuerto ? " Tuerto" : ""} (${formatearPesoLimpio(g.pesoAbs)})\n`); }
+    document.getElementById("whatsappTextarea").value = txt; document.getElementById("whatsappModal").style.display = "flex";
+  }
+  function cerrarWhatsappModal() { document.getElementById("whatsappModal").style.display = "none"; }
+  function copiarAlPortapapelesModal() { const textarea = document.getElementById("whatsappTextarea"); textarea.select(); textarea.setSelectionRange(0,99999); try { document.execCommand("copy"); alert("¡Resumen copiado con éxito!"); cerrarWhatsappModal(); } catch(e) { alert("Mantené presionado el texto y seleccioná Copiar."); } }
+
+  function limpiarTodoSinClave() {
+    if (!usuarioActual) return;
+    if (confirm("¿Está seguro de que desea borrar todos los datos de la planilla actual?")) {
+      resetearPlanillaLocal();
+      guardarDatosUsuario();
+      actualizarEstadoPub("Planilla local limpia. Para actualizar Firebase, generá una nueva cartelera.");
+    }
+  }
+
+  ["orgPaisFirebase", "orgFechaFirebase", "orgTorneoFirebase"].forEach(id => {
+    window.addEventListener("load", () => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("change", guardarDatosUsuario);
+    });
+  });
+
+  window.addEventListener("load", () => {
+    iniciarFirebase();
+    resetearPlanillaLocal();
+    actualizarEstadoSesion();
+    cargarPaisesPublicos();
+  });
+</script>
+</body>
+</html>
